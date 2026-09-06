@@ -1,69 +1,91 @@
-import Image from "next/image";
+  // app/page.js
+  'use client';
 
-export default function Home() {
-  return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.js
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+  import { useEffect, useState } from 'react';
+  import DashboardLayout from '@/components/DashboardLayout';
+  import { supabase } from '@/lib/supabase';
+  import { Briefcase, Clock, AlertTriangle, CheckCircle } from 'lucide-react';
+
+  export default function DashboardPage() {
+    const [stats, setStats] = useState({ total: 0, active: 0, mine: 0, expiring: 0 });
+    const [recent, setRecent] = useState([]);
+
+    useEffect(() => {
+      const load = async () => {
+        const { data: { session } } = await supabase.auth.getSession();
+        const uid = session?.user?.id;
+
+        const [total, active, mine, expiring, recentApps] = await Promise.all([
+          supabase.from('applications').select('*', { count: 'exact', head: true }),
+          supabase.from('applications').select('*', { count: 'exact', head: true }).neq('status', 'completed'),
+          supabase.from('applications').select('*', { count: 'exact', head: true }).eq('assigned_to', uid),
+          supabase.from('applications').select('*', { count: 'exact', head: true })
+            .gte('current_visa_expiry', new Date().toISOString())
+            .lte('current_visa_expiry', new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()),
+          supabase.from('applications')
+            .select('*, employees(name_en, nationality), companies(name)')
+            .order('created_at', { ascending: false })
+            .limit(5),
+        ]);
+
+        setStats({
+          total: total.count || 0,
+          active: active.count || 0,
+          mine: mine.count || 0,
+          expiring: expiring.count || 0,
+        });
+        setRecent(recentApps.data || []);
+      };
+      load();
+    }, []);
+
+    const statsCards = [
+      { title: 'Total Applications', value: stats.total, icon: Briefcase, color: 'bg-blue-500/10 text-blue-500' },
+      { title: 'Active Applications', value: stats.active, icon: Clock, color: 'bg-emerald-500/10 text-emerald-500' },
+      { title: 'My Pending Tasks', value: stats.mine, icon: AlertTriangle, color: 'bg-amber-500/10 text-amber-500' },
+      { title: 'Expiring Soon', value: stats.expiring, icon: CheckCircle, color: 'bg-rose-500/10 text-rose-500' },
+    ];
+
+    return (
+      <DashboardLayout>
+        <div className="space-y-6">
+          <div>
+            <h1 className="text-2xl font-bold text-[var(--text-main)]">Dashboard</h1>
+            <p className="text-[var(--text-muted)] mt-1">Welcome to WORK 365!</p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {statsCards.map((card, index) => {
+              const Icon = card.icon;
+              return (
+                <div key={index} className="bg-[var(--bg-card)] border border-[var(--border-color)] rounded-xl p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-[var(--text-muted)]">{card.title}</p>
+                      <p className="text-3xl font-bold text-[var(--text-main)] mt-2">{card.value}</p>
+                    </div>
+                    <div className={`p-3 rounded-lg ${card.color}`}>
+                      <Icon className="w-6 h-6" />
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="bg-[var(--bg-card)] border border-[var(--border-color)] rounded-xl">
+            <div className="p-6 border-b border-[var(--border-color)]">
+              <h2 className="text-lg font-semibold text-[var(--text-main)]">Recent Applications</h2>
+            </div>
+            <div className="p-6">
+              {recent.length === 0 ? (
+                <p className="text-sm text-[var(--text-muted)] text-center">No applications yet. Create your first application soon!</p>
+              ) : (
+                <p className="text-sm text-[var(--text-muted)]">{recent.length} recent application(s)</p>
+              )}
+            </div>
+          </div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
-  );
-}
+      </DashboardLayout>
+    );
+  }
